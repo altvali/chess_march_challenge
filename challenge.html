@@ -1,0 +1,807 @@
+<!doctype html>
+<html>
+    <head>
+        <title></title>
+        <style type="text/css">
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+td {
+    min-width: 18px;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    font-size: 18px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #ddd;
+}
+button {
+    cursor: pointer;
+}
+        </style>
+    </head>
+    <html>
+        <div id="playback">
+            <select id="test">
+                <option>0</option>
+                <option>1</option>
+                <option>2</option>
+                <option>3</option>
+                <option>4</option>
+                <option>5</option>
+                <option>6</option>
+                <option>7</option>
+                <option>8</option>
+                <option>9</option>
+                <option>10</option>
+                <option>11</option>
+                <option>12</option>
+                <option>13</option>
+                <option>14</option>
+                <option>15</option>
+            </select>
+            &nbsp;
+            &nbsp;
+            &nbsp;
+            <button id="first">&larrfs;</button>
+            <button id="prev">&lbarr;</button>
+            <button id="play">&rtrif;</button><!-- stop: &squf; -->
+            <button id="next">&rbarr;</button>
+            <button id="last">&rarrfs;</button>
+            
+        </div>
+        <table id="map"></table>
+        <script type="text/javascript">
+
+// useful constants
+const ROWS=41, COLS=51, MOVE_MAX_DISTANCE=8,
+    PIECE_TYPES = {
+        2: "pawn",
+        3: "knight",
+        4: "bishop",
+        5: "rook",
+        6: "queen",
+        7: "king",
+    }
+var POSSIBLE_MOVES_MASK = {}
+
+const init = () => {
+    POSSIBLE_MOVES_MASK = {
+        "pawn": [
+            {x: 0, y:-1},
+            {x: 1, y: 0},
+            {x: 0, y: 1},
+            {x:-1, y: 0}
+        ],
+        "knight": [
+            {x: 1, y:-2},
+            {x: 2, y:-1},
+            {x: 2, y: 1},
+            {x: 1, y: 2},
+            {x:-1, y: 2},
+            {x:-2, y: 1},
+            {x:-2, y:-1},
+            {x:-1, y:-2}
+        ],
+        "king": [
+            {x: 0, y:-1},
+            {x: 1, y:-1},
+            {x: 1, y: 0},
+            {x: 1, y: 1},
+            {x: 0, y: 1},
+            {x:-1, y: 1},
+            {x:-1, y: 0},
+            {x:-1, y:-1}
+        ],
+        "bishop": [],
+        "rook": [],
+        "queen": [],
+    }
+
+    for (let i=1; i<=MOVE_MAX_DISTANCE; i++) {
+        POSSIBLE_MOVES_MASK.bishop.push(
+            {x:-i, y:-i},
+            {x: i, y:-i},
+            {x:-i, y: i},
+            {x: i, y: i}
+        )
+    }
+    for (let i=1; i<=MOVE_MAX_DISTANCE; i++) {
+        POSSIBLE_MOVES_MASK.rook.push(
+            {x:-i, y: 0},
+            {x: i, y: 0},
+            {x: 0, y:-i},
+            {x: 0, y: i}
+        )
+    }
+    for (let i=1; i<=MOVE_MAX_DISTANCE; i++) {
+        POSSIBLE_MOVES_MASK.queen.push(
+            {x:-i, y:-i},
+            {x: i, y: -i},
+            {x:-i, y: i},
+            {x: i, y: i},
+            {x:-i, y: 0},
+            {x: i, y: 0},
+            {x: 0, y:-i},
+            {x: 0, y: i}
+        )
+    }
+}
+
+const getEmptyDataMap = () => {
+    let arr = [];
+    for (let i=0; i<ROWS; i++) {
+        let row = [];
+        for (let j=0; j<COLS; j++) {
+            row.push(0);
+        }
+        arr.push(row);
+    }
+    return arr;
+}
+
+const populateTable = (data_map) => {
+    let symbols = [
+            '&nbsp;',    // empty
+            '&boxplus;', // obstacle
+            '&#9817;',   // pawn
+            '&#9816;',   // knight
+            '&#9815;',   // bishop
+            '&#9814;',   // rook
+            '&#9813;',   // queen
+            '&#9812;',   // king
+            '&oast;'     // king destination
+        ],
+        inner_html = '';
+    for (let i=0; i<ROWS; i++) {
+        let tr = '<tr>';
+        for (let j=0;j<COLS; j++) {
+            tr += '<td>' + symbols[data_map[i][j]] + '</td>';
+        }
+        tr += '</tr>';
+        inner_html += tr;
+    }
+    document.getElementById("map").innerHTML = inner_html;
+}
+
+const extractSquad = (data_map) => {
+    let squad = {
+            "king": {},
+            "followers": [],
+        }
+    for (let i=0; i<ROWS; i++) {
+        for (let j=0; j<COLS; j++) {
+            if (data_map[i][j]==7) { // king
+                squad.king.x = i
+                squad.king.y = j
+            }
+            if (data_map[i][j]==8) { // king destination
+                squad.king.destination = {"x": i, "y": j}
+            }
+            if (1<data_map[i][j] && data_map[i][j]<7) {
+                squad.followers.push({"type": PIECE_TYPES[data_map[i][j]], "x": i, "y": j})
+            }
+        }
+    }
+    // compute followers destinations
+    let delta = {
+        "x": squad.king.destination.x - squad.king.x,
+        "y": squad.king.destination.y - squad.king.y
+    }
+    for (let k=0; k<squad.followers.length; k++) {
+        squad.followers[k].destination = {
+            "x": squad.followers[k].x + delta.x,
+            "y": squad.followers[k].y + delta.y
+        }
+    }
+    return squad
+}
+
+const validPieceMoves = (piece, king, data_map) => {
+    if (!piece) {
+        return [];
+    }
+    let valid_moves = []
+    if (["pawn", "knight"].includes(piece.type)) {
+        for (let offset of POSSIBLE_MOVES_MASK[piece.type]) {
+            let x = piece.x + offset.x,
+                y = piece.y + offset.y
+            if (x<0 || x>=ROWS || y<0 || y>=COLS) {
+                continue;
+            }
+            // can move only in empty squares or the king destination
+            if (![0, 8].includes(data_map[x][y])) {
+                continue
+            }
+            // is it further than the king?
+            if (MOVE_MAX_DISTANCE < Math.abs(x-king.x) || MOVE_MAX_DISTANCE < Math.abs(y-king.y)) {
+                continue
+            }
+            
+            valid_moves.push([piece.x, piece.y, x, y])
+        }
+    }
+    if (["bishop", "rook", "queen"].includes(piece.type)) {
+        let direction_steps = {
+                "up":        {x:  0, y: -1},
+                "upright":   {x:  1, y: -1},
+                "right":     {x:  1, y:  0},
+                "downright": {x:  1, y:  1},
+                "down":      {x:  0, y:  1},
+                "downleft":  {x: -1, y:  1},
+                "left":      {x: -1, y:  0},
+                "upleft":    {x: -1, y: -1}
+            },
+            piece_directions = {
+                "bishop": ["upright", "downright", "downleft", "upleft"],
+                "rook": ["up", "down", "left", "right"],
+                "queen": ["upright", "downright", "downleft", "upleft", "up", "down", "left", "right"]
+            }
+        for (let direction of piece_directions[piece.type]) {
+            for (let i=1; i <= 2*MOVE_MAX_DISTANCE; i++) {
+                let x = piece.x + i*direction_steps[direction].x,
+                    y = piece.y + i*direction_steps[direction].y;
+                if (x<0 || x>=ROWS || y<0 || y>=COLS) {
+                    break;
+                }
+                // can move only in empty squares or the king destination
+                if (![0, 8].includes(data_map[x][y])) {
+                    break;
+                }
+                // is it further than the king?
+                if (MOVE_MAX_DISTANCE < Math.abs(x-king.x) || MOVE_MAX_DISTANCE < Math.abs(y-king.y)) {
+                    break;
+                }
+                valid_moves.push([piece.x, piece.y, x, y])
+            }
+        }
+    }
+    return valid_moves;
+}
+
+const validKingMoves = (squad, data_map) => {
+    let valid_moves = [];
+    top: // label to continue from the follower loop
+    for (let offset of POSSIBLE_MOVES_MASK.king) {
+        let x = squad.king.x + offset.x,
+            y = squad.king.y + offset.y
+        if (x<0 || x>=ROWS || y<0 || y>=COLS) {
+            continue;
+        }
+        // can move only in empty squares or the king destination
+        if (![0, 8].includes(data_map[x][y])) {
+            continue
+        }
+        // is it further than any of the followers?
+        for (let follower of squad.followers) {
+            if (MOVE_MAX_DISTANCE < Math.abs(x-follower.x) || MOVE_MAX_DISTANCE < Math.abs(y-follower.y)) {
+                continue top;
+            }
+        }
+        valid_moves.push([squad.king.x, squad.king.y, x, y])
+    }
+    return valid_moves;
+}
+
+class MovePlayer {
+
+    constructor () {
+    
+    }
+
+    load (initial_map, move_list) {
+        this.initial_map = []
+        for (let i=0; i<initial_map.length; i++) {
+            this.initial_map[i] = initial_map[i].slice()
+        }
+        this.move_list = move_list
+        this.first()
+    }
+    
+    first = () => {
+        this.cancelAnimation()
+        this.move_index = 0
+        this.current_map = []
+        for (let i=0; i<this.initial_map.length; i++) {
+            this.current_map[i] = this.initial_map[i].slice()
+        }
+        this.squad = extractSquad(this.current_map)
+        populateTable(this.current_map)
+    }
+    
+    computeNextMove = () => {
+        // returns true if succeeds, false if invalid or no move to play
+        if (this.move_index >= this.move_list.length) {
+            return false
+        }
+        let old_x = this.move_list[this.move_index][0],
+            old_y = this.move_list[this.move_index][1],
+            new_x = this.move_list[this.move_index][2],
+            new_y = this.move_list[this.move_index][3],
+            piece_type = this.current_map[old_x][old_y],
+            valid_moves;
+        
+        let follower_index;
+        
+        if (PIECE_TYPES[piece_type] == "king") {
+            valid_moves = validKingMoves(this.squad, this.current_map)
+        } else {
+            for (let i=0; i<this.squad.followers.length; i++) {
+                if (old_x == this.squad.followers[i].x && old_y == this.squad.followers[i].y) {
+                    follower_index = i;
+                    break;
+                }
+            }
+            valid_moves = validPieceMoves(this.squad.followers[follower_index], 
+                                          this.squad.king,
+                                          this.current_map)
+        }
+        // check if the move is among the valid ones
+        let valid = false
+        for (let i=0; i<valid_moves.length; i++) {
+            if (this.move_list[this.move_index][0] == valid_moves[i][0] &&
+                this.move_list[this.move_index][1] == valid_moves[i][1] &&
+                this.move_list[this.move_index][2] == valid_moves[i][2] &&
+                this.move_list[this.move_index][3] == valid_moves[i][3]
+            ) {
+                valid = true;
+                break;
+            }
+        }
+        if (!valid) {
+            return false;
+        }
+        // make the move by changing squad and current_map
+        if (old_x == this.squad.king.destination.x && old_y == this.squad.king.destination.y) {
+            this.current_map[old_x][old_y] = 8
+        } else {
+            this.current_map[old_x][old_y] = 0
+        }
+        this.current_map[new_x][new_y] = piece_type
+        if (PIECE_TYPES[piece_type] == "king") {
+            this.squad.king.x = new_x
+            this.squad.king.y = new_y
+        } else {
+            this.squad.followers[follower_index].x = new_x
+            this.squad.followers[follower_index].y = new_y
+        }
+        this.move_index += 1;
+        return true;
+    }
+    
+    prev = () => {
+        this.cancelAnimation()
+        if (this.move_index) {
+            let old_x = this.move_list[this.move_index-1][2],
+                old_y = this.move_list[this.move_index-1][3],
+                new_x = this.move_list[this.move_index-1][0],
+                new_y = this.move_list[this.move_index-1][1],
+                piece_type = this.current_map[old_x][old_y]
+            if (old_x == this.squad.king.destination.x && old_y == this.squad.king.destination.y) {
+                this.current_map[old_x][old_y] = 8
+            } else {
+                this.current_map[old_x][old_y] = 0
+                
+            }
+            this.current_map[new_x][new_y] = piece_type
+            
+            if (old_x == this.squad.king.x && old_y == this.squad.king.y) {
+                this.squad.king.x = new_x
+                this.squad.king.y = new_y
+            } else {
+                for (let i=0; i<this.squad.followers.length; i++) {
+                    if (old_x == this.squad.followers[i].x && old_y == this.squad.followers[i].y) {
+                        this.squad.followers[i].x = new_x
+                        this.squad.followers[i].y = new_y
+                        break;
+                    }
+                }
+            }
+            this.move_index -= 1;
+            populateTable(this.current_map)
+        }
+    }
+    
+    play = () => {
+        if (this.timeout) {
+            this.cancelAnimation()
+        } else {
+            if (this.computeNextMove()) {
+                populateTable(this.current_map)
+                document.getElementById("play").innerHTML = "&squf;";
+                this.timeout = setTimeout(this.playAnimation, 1000)
+            }
+        }
+    }
+    
+    playAnimation = () => {
+        if (window.mp.computeNextMove()) {
+            populateTable(window.mp.current_map)
+            this.timeout = setTimeout(window.mp.playAnimation, 1000)
+        } else {
+            window.mp.cancelAnimation()
+        }
+    }
+    
+    cancelAnimation = () => {
+        if (this.timeout) {
+            clearTimeout(this.timeout);
+            this.timeout = false;
+            document.getElementById("play").innerHTML = "&rtrif;";
+        }
+    }
+    
+    next = () => {
+        this.cancelAnimation()
+        if (this.computeNextMove()) {
+            populateTable(this.current_map)
+        }
+        
+    }
+    
+    last = () => {
+        this.cancelAnimation()
+        while (this.computeNextMove()) {}
+        populateTable(this.current_map)
+    }
+    
+    hasReachedDestination = () => {
+        if (this.squad.king.x != this.squad.king.destination.x || this.squad.king.y != this.squad.king.destination.y) {
+            return false;
+        }
+        for (let i=0; i<this.squad.followers.length; i++) {
+            if (this.squad.followers[i].x != this.squad.followers[i].destination.x || this.squad.followers[i].y != this.squad.followers[i].y) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+class Tests {
+    constructor () {
+        this.test_sets = []
+        this.genTest0()
+        this.genTest1()
+        this.genTest2()
+        this.genTest3()
+        this.genTest4()
+        this.genTest5()
+        this.genTest6()
+        this.genTest7()
+        this.genTest8()
+        this.genTest9()
+        this.genTest10()
+        this.genTest11()
+        this.genTest12()
+        this.genTest13()
+        this.genTest14()
+        this.genTest15()
+    }
+    
+    genTest0 = () => {
+        let map = getEmptyDataMap()
+        map[20][20] = 7
+        map[19][20] = 2
+        map[21][20] = 2
+        map[20][25] = 8
+        this.test_sets.push(map)
+    }
+    genTest1 = () => {
+        let map = getEmptyDataMap()
+        map[20][20] = 7
+        map[19][20] = 2
+        map[21][20] = 2
+        map[20][30] = 8
+        this.test_sets.push(map)
+    }
+    genTest2 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 2
+        map[19][20] = 2
+        map[19][21] = 2
+        map[20][19] = 2
+        map[20][20] = 7
+        map[20][21] = 2
+        map[21][19] = 2
+        map[21][20] = 2
+        map[21][21] = 2
+        map[30][30] = 8
+        this.test_sets.push(map)
+    }
+    genTest3 = () => {
+        let map = getEmptyDataMap()
+        map[20][20] = 7
+        map[19][20] = 2
+        map[18][20] = 2
+        map[17][20] = 2
+        map[16][20] = 2
+        map[15][20] = 2
+        map[14][20] = 2
+        map[13][20] = 2
+        map[12][20] = 2
+        map[10][20] = 8
+        this.test_sets.push(map)
+    }
+    genTest4 = () => {
+        let map = getEmptyDataMap()
+        map[20][20] = 7
+        map[19][20] = 2
+        map[18][20] = 2
+        map[17][20] = 2
+        map[16][20] = 2
+        map[15][20] = 2
+        map[14][20] = 2
+        map[13][20] = 2
+        map[12][20] = 2
+        map[30][20] = 8
+        this.test_sets.push(map)
+    }
+    genTest5 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 3
+        map[19][20] = 3
+        map[19][21] = 3
+        map[20][19] = 3
+        map[20][20] = 7
+        map[20][21] = 3
+        map[21][19] = 3
+        map[21][20] = 3
+        map[21][21] = 3
+        map[30][30] = 8
+        this.test_sets.push(map)
+    }
+    genTest6 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 4
+        map[19][20] = 4
+        map[19][21] = 4
+        map[20][19] = 4
+        map[20][20] = 7
+        map[20][21] = 4
+        map[21][19] = 4
+        map[21][20] = 4
+        map[21][21] = 4
+        map[30][30] = 8
+        this.test_sets.push(map)
+    }
+    genTest7 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 5
+        map[19][20] = 5
+        map[19][21] = 5
+        map[20][19] = 5
+        map[20][20] = 7
+        map[20][21] = 5
+        map[21][19] = 5
+        map[21][20] = 5
+        map[21][21] = 5
+        map[30][30] = 8
+        this.test_sets.push(map)
+    }
+    genTest8 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 6
+        map[19][20] = 6
+        map[19][21] = 6
+        map[20][19] = 6
+        map[20][20] = 7
+        map[20][21] = 6
+        map[21][19] = 6
+        map[21][20] = 6
+        map[21][21] = 6
+        map[30][30] = 8
+        this.test_sets.push(map)
+    }
+    genTest9 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 2
+        map[19][20] = 3
+        map[19][21] = 4
+        map[20][19] = 6
+        map[20][20] = 7
+        map[20][21] = 2
+        map[21][19] = 3
+        map[21][20] = 4
+        map[21][21] = 5
+        map[30][30] = 8
+        this.test_sets.push(map)
+    }
+    genTest10 = () => {
+        let map = getEmptyDataMap()
+        map[12][12] = 2
+        map[12][20] = 3
+        map[12][28] = 4
+        map[20][12] = 6
+        map[20][20] = 7
+        map[20][28] = 2
+        map[28][12] = 3
+        map[28][20] = 4
+        map[28][28] = 5
+        map[30][40] = 8
+        this.test_sets.push(map)
+    }
+    genTest11 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 2
+        map[19][20] = 3
+        map[19][21] = 4
+        map[20][19] = 6
+        map[20][20] = 7
+        map[20][21] = 2
+        map[21][19] = 3
+        map[21][20] = 4
+        map[21][21] = 5
+        for (let i=15; i<26; i++) {
+            map[i][30] = 1
+            map[i][31] = 1
+        }
+        map[20][40] = 8
+        this.test_sets.push(map)
+    }
+    genTest12 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 3
+        map[19][20] = 3
+        map[19][21] = 3
+        map[20][19] = 3
+        map[20][20] = 7
+        map[20][21] = 3
+        map[21][19] = 3
+        map[21][20] = 3
+        map[21][21] = 3
+        for (let i=15; i<26; i++) {
+            map[i][30] = 1
+        }
+        map[20][40] = 8
+        this.test_sets.push(map)
+    }
+    genTest13 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 2
+        map[19][20] = 3
+        map[19][21] = 4
+        map[20][19] = 6
+        map[20][20] = 7
+        map[20][21] = 2
+        map[21][19] = 3
+        map[21][20] = 4
+        map[21][21] = 5
+        for (let i=25; i<36; i++) {
+            map[13][i] = 1
+            map[14][i] = 1
+            map[15][i] = 1
+            map[16][i] = 1
+            map[17][i] = 1
+            map[22][i] = 1
+            map[23][i] = 1
+            map[24][i] = 1
+            map[25][i] = 1
+            map[26][i] = 1
+            map[27][i] = 1
+        }
+        map[20][40] = 8
+        this.test_sets.push(map)
+    }
+    genTest14 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 2
+        map[19][20] = 3
+        map[19][21] = 4
+        map[20][19] = 6
+        map[20][20] = 7
+        map[20][21] = 2
+        map[21][19] = 3
+        map[21][20] = 4
+        map[21][21] = 5
+        for (let i=25; i<36; i++) {
+            map[13][i] = 1
+            map[14][i] = 1
+            map[15][i] = 1
+            map[16][i] = 1
+            map[17][i] = 1
+            map[18][i] = 1
+            map[21][i] = 1
+            map[22][i] = 1
+            map[23][i] = 1
+            map[24][i] = 1
+            map[25][i] = 1
+            map[26][i] = 1
+            map[27][i] = 1
+        }
+        map[20][40] = 8
+        this.test_sets.push(map)
+    }
+    genTest15 = () => {
+        let map = getEmptyDataMap()
+        map[19][19] = 2
+        map[19][20] = 2
+        map[19][21] = 2
+        map[20][19] = 2
+        map[20][20] = 7
+        map[20][21] = 2
+        map[21][19] = 2
+        map[21][20] = 2
+        map[21][21] = 2
+        for (let i=25; i<36; i++) {
+            map[13][i] = 1
+            map[14][i] = 1
+            map[15][i] = 1
+            map[16][i] = 1
+            map[17][i] = 1
+            map[18][i] = 1
+            map[21][i] = 1
+            map[22][i] = 1
+            map[23][i] = 1
+            map[24][i] = 1
+            map[25][i] = 1
+            map[26][i] = 1
+            map[27][i] = 1
+        }
+        map[20][40] = 8
+        this.test_sets.push(map)
+    }
+}
+
+const changeListener = (e) => {
+    window.mp.load(window.t.test_sets[parseInt(document.getElementById("test").value)], [])
+}
+
+const main = () => {
+    init()
+    window.t = new Tests()
+    window.mp = new MovePlayer()
+    window.mp.load(window.t.test_sets[0], [])
+    document.getElementById("first").addEventListener("click",window.mp.first)
+    document.getElementById("prev").addEventListener("click", window.mp.prev)
+    document.getElementById("play").addEventListener("click", window.mp.play)
+    document.getElementById("next").addEventListener("click", window.mp.next)
+    document.getElementById("last").addEventListener("click", window.mp.last)
+    
+    document.getElementById("test").addEventListener("change", changeListener)
+}
+
+const evaluate = (test_sets, solver_callback) => {
+    let score, total=0, mp = new MovePlayer()
+    for (let i=0; i<test_sets.length; i++) {
+        let move_list = solver_callback(test_sets[i])
+        mp.load(test_sets[i], move_list)
+        while (mp.computeNextMove()) {}
+        if (mp.hasReachedDestination()) {
+            score = mp.move_index-1
+        } else {
+            score = 100000
+        }
+        console.log("score for", i, "is", score);
+        total += score
+    }
+    console.log("total score is", total)
+}
+
+const solver = (data_map) => {
+    // hardcoded solution for the first problem in the test
+    return [
+        [20, 20, 20, 21],
+        [20, 21, 20, 22],
+        [20, 22, 20, 23],
+        [20, 23, 20, 24],
+        [20, 24, 20, 25],
+        [19, 20, 19, 21],
+        [19, 21, 19, 22],
+        [19, 22, 19, 23],
+        [19, 23, 19, 24],
+        [19, 24, 19, 25],
+        [21, 20, 21, 21],
+        [21, 21, 21, 22],
+        [21, 22, 21, 23],
+        [21, 23, 21, 24],
+        [21, 24, 21, 25],
+    ];
+}
+
+main();
+
+    </script>
+</html>
