@@ -752,8 +752,9 @@ const changeListener = (e) => {
 const main = () => {
     init()
     window.t = new Tests()
+    var move_list = solver(window.t.test_sets[0])
     window.mp = new MovePlayer()
-    window.mp.load(window.t.test_sets[0], [])
+    window.mp.load(window.t.test_sets[0], move_list)
     document.getElementById("first").addEventListener("click",window.mp.first)
     document.getElementById("prev").addEventListener("click", window.mp.prev)
     document.getElementById("play").addEventListener("click", window.mp.play)
