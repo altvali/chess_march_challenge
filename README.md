@@ -52,4 +52,4 @@ This will load the map and the moves up to the last valid move. You'll be able t
 
 # Submissions
 
-Submit your solver function and total score achieved at the Code Golf StackExchange challenge page. (todo: link to it once it's posted). Remember, the solver must generalize well and your score should be as low as possible. Good luck!
+Submit your solver function and total score achieved at the Code Golf StackExchange challenge page at https://codegolf.stackexchange.com/questions/231812/chess-squad-march . Remember, the solver must generalize well and your score should be as low as possible. Good luck!
