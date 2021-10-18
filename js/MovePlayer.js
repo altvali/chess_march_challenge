@@ -124,7 +124,7 @@ class MovePlayer {
             if (this.computeNextMove()) {
                 populateTable(this.current_map)
                 document.getElementById("play").innerHTML = "&squf;";
-                this.timeout = setTimeout(this.playAnimation, 1000)
+                this.timeout = setTimeout(this.playAnimation, 250)
             }
         }
     }

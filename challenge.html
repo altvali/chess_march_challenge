@@ -56,6 +56,7 @@ button {
         <script type="text/javascript" src="js/MovePlayer.js"></script>
         <script type="text/javascript" src="js/Tests.js"></script>
         <script type="text/javascript" src="js/FitnessSolver.js"></script>
+        <script type="text/javascript" src="js/AStarSolver.js"></script>
         <script type="text/javascript">
 
 // useful constants
@@ -189,14 +190,14 @@ const extractSquad = (data_map) => {
         }
     }
     // compute followers destinations
-    let delta = {
+    squad.delta = {
         "x": squad.king.destination.x - squad.king.x,
         "y": squad.king.destination.y - squad.king.y
     }
     for (let k=0; k<squad.followers.length; k++) {
         squad.followers[k].destination = {
-            "x": squad.followers[k].x + delta.x,
-            "y": squad.followers[k].y + delta.y
+            "x": squad.followers[k].x + squad.delta.x,
+            "y": squad.followers[k].y + squad.delta.y
         }
     }
     return squad
@@ -331,8 +332,10 @@ const evaluate = (test_sets, solver_callback) => {
 const solver = (data_map) => {
     // always pick the best move from the available moves, according to loss function
     let fs = new FitnessSolver(data_map);
+    // let fs = new AStarSolver(data_map);
     return fs.solve();
 }
+
 
 main();
 
